@@ -48,8 +48,8 @@ def call_gemini(prompt, api_key):
     """
     Gemini REST API를 호출하여 프롬프트에 따른 마케팅 분석 보고서를 생성합니다.
     """
-    # 안정적인 gemini-2.5-flash 모델 사용
-    model_name = "gemini-2.5-flash"
+    # 가볍고 빠른 Gemini 3.5 Flash Lite 모델 사용
+    model_name = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
     headers = {
         "Content-Type": "application/json"
