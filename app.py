@@ -2,7 +2,7 @@ import os
 import json
 import logging
 import requests
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, send_from_directory, make_response
 from dotenv import load_dotenv
 
 # .env 파일에서 환경 변수 불러오기
@@ -91,6 +91,19 @@ def call_gemini(prompt, api_key):
 def index():
     """메인 화면을 렌더링합니다."""
     return render_template("index.html")
+
+@app.route("/manifest.json")
+def manifest():
+    """PWA 매니페스트 파일을 제공합니다."""
+    return send_from_directory("static", "manifest.json", mimetype="application/manifest+json")
+
+@app.route("/sw.js")
+def service_worker():
+    """PWA 서비스 워커를 루트 스코프로 제공합니다."""
+    response = make_response(send_from_directory("static", "sw.js"))
+    response.headers["Service-Worker-Allowed"] = "/"
+    response.headers["Content-Type"] = "application/javascript"
+    return response
 
 @app.route("/generate", methods=["POST"])
 def generate():
