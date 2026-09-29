@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 기업 마케팅 분석기 (MarketInsight AI)</title>
+    <!-- 구글 웹 폰트 (Pretendard 스타일의 깔끔한 Noto Sans KR) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Markdown 렌더링 라이브러리 (marked.js) -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- 사용자 정의 스타일시트 -->
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <!-- 헤더 영역 -->
+        <header class="app-header">
+            <div class="badge">Fact-Checked by Serper & Gemini</div>
+            <h1>📊 AI 기업 마케팅 분석기</h1>
+            <p class="subtitle">실시간 공식 웹 데이터(Serper)를 기반으로 거짓 없는 팩트 중심의 마케팅 전략 분석 보고서를 작성합니다.</p>
+        </header>
+
+        <main class="main-content">
+            <!-- 입력 폼 카드 -->
+            <section class="form-card">
+                <h2>분석 정보 입력</h2>
+                <p class="form-desc">분석하고자 하는 기업 정보와 요구사항을 입력해 주세요. (* 표시는 필수 항목입니다.)</p>
+                
+                <form id="analyze-form" novalidate>
+                    <div class="form-grid">
+                        <!-- 기업명 (필수) -->
+                        <div class="form-group">
+                            <label for="company_name">기업명 <span class="required">*</span></label>
+                            <input type="text" id="company_name" name="company_name" placeholder="예: 당근(당근마켓), 토스, 올리브영" required>
+                            <span class="field-error" id="error-company_name"></span>
+                        </div>
+
+                        <!-- 분석 목적 (필수) -->
+                        <div class="form-group">
+                            <label for="purpose">분석 목적 <span class="required">*</span></label>
+                            <input type="text" id="purpose" name="purpose" placeholder="예: 2030 신규 고객 유치 전략 벤치마킹, 브랜드 리포지셔닝 분석" required>
+                            <span class="field-error" id="error-purpose"></span>
+                        </div>
+
+                        <!-- 주요 관심 타깃 (선택) -->
+                        <div class="form-group">
+                            <label for="target_audience">주요 관심 타깃</label>
+                            <input type="text" id="target_audience" name="target_audience" placeholder="예: 2030 직장인 1인 가구, 알파세대 학부모">
+                        </div>
+
+                        <!-- 주요 경쟁사 (선택) -->
+                        <div class="form-group">
+                            <label for="competitors">주요 경쟁사</label>
+                            <input type="text" id="competitors" name="competitors" placeholder="예: 중고나라, 번개장터">
+                        </div>
+
+                        <!-- 관심 마케팅 채널 (선택) -->
+                        <div class="form-group">
+                            <label for="channels">관심 마케팅 채널</label>
+                            <input type="text" id="channels" name="channels" placeholder="예: 인스타그램 릴스, 유튜브 브랜드 채널, 옥외광고">
+                        </div>
+
+                        <!-- 분석 희망 캠페인 (선택) -->
+                        <div class="form-group">
+                            <label for="campaign">분석 희망 캠페인</label>
+                            <input type="text" id="campaign" name="campaign" placeholder="예: 최근 성수동 팝업스토어, 따뜻한 사연 공모전">
+                        </div>
+                    </div>
+
+                    <!-- 제출 버튼 -->
+                    <div class="form-actions">
+                        <button type="submit" id="submit-btn" class="btn btn-primary">
+                            <span class="btn-text">🚀 사실 기반 마케팅 보고서 생성</span>
+                        </button>
+                    </div>
+                </form>
+            </section>
+
+            <!-- 에러 알림 메시지 영역 -->
+            <div id="alert-box" class="alert-box hidden">
+                <span class="alert-icon">⚠️</span>
+                <span id="alert-message" class="alert-message"></span>
+            </div>
+
+            <!-- 로딩 상태 표시 영역 -->
+            <div id="loading-spinner" class="loading-container hidden">
+                <div class="spinner"></div>
+                <div class="loading-text-box">
+                    <p class="loading-title">실시간 공식 팩트 데이터를 검색하고 있습니다...</p>
+                    <p class="loading-subtitle">Serper.dev로 웹사이트/블로그를 검색하고 Gemini AI가 보고서를 구성 중입니다. (약 10~20초 소요)</p>
+                </div>
+            </div>
+
+            <!-- 결과 보고서 표시 카드 -->
+            <section id="result-section" class="result-card hidden">
+                <div class="result-header">
+                    <div class="result-title-group">
+                        <span class="status-dot"></span>
+                        <h2>생성된 마케팅 분석 보고서</h2>
+                    </div>
+                    <div class="result-actions">
+                        <button id="copy-btn" class="btn btn-secondary">
+                            📋 보고서 복사
+                        </button>
+                        <button id="download-btn" class="btn btn-secondary">
+                            💾 Markdown 다운로드 (.md)
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 렌더링된 보고서 뷰어 -->
+                <div id="report-content" class="report-content markdown-body"></div>
+            </section>
+        </main>
+
+        <footer class="app-footer">
+            <p>© 2026 AI 기업 마케팅 분석기. Powered by Flask, Serper.dev & Google Gemini API.</p>
+        </footer>
+    </div>
+
+    <!-- 클라이언트 사이드 스크립트 -->
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
