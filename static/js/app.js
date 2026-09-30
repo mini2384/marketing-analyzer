@@ -89,7 +89,7 @@ document.addEventListener("DOMContentLoaded", () => {
             alertBox.classList.add("hidden");
         } else {
             submitBtn.disabled = false;
-            btnText.textContent = "🚀 사실 기반 마케팅 보고서 생성";
+            btnText.textContent = "사실 기반 마케팅 보고서 생성";
             loadingSpinner.classList.add("hidden");
         }
     }
