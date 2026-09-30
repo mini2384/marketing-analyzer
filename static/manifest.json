@@ -4,8 +4,8 @@
   "description": "실시간 팩트 기반 AI 마케팅 분석 및 기업 가치 연계 보고서",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#f8fafc",
-  "theme_color": "#3b82f6",
+  "background_color": "#fefce8",
+  "theme_color": "#f59e0b",
   "icons": [
     {
       "src": "/static/icons/icon-192.png",
