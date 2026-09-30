@@ -195,18 +195,6 @@ body {
     font-weight: 800;
     margin-bottom: 6px;
     color: var(--text-main);
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.card-header-with-mascot h2::before {
-    content: "";
-    display: inline-block;
-    width: 6px;
-    height: 20px;
-    background: linear-gradient(180deg, #f59e0b, #fbbf24);
-    border-radius: 4px;
 }
 
 .form-mascot {
