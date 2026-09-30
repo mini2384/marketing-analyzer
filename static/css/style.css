@@ -181,40 +181,28 @@ body {
     border-color: var(--border-hover);
 }
 
-/* 마스코트가 있는 카드 헤더 */
-.card-header-with-mascot {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+/* 카드 헤더 */
+.card-header {
     margin-bottom: 24px;
-    gap: 20px;
 }
 
-.card-header-with-mascot h2 {
+.card-header h2 {
     font-size: 1.4rem;
     font-weight: 800;
     margin-bottom: 6px;
     color: var(--text-main);
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
-.form-mascot {
-    width: 136px; /* 기존 68px에서 2배로 확대 */
-    height: auto;
-    filter: drop-shadow(0 6px 14px rgba(217, 119, 6, 0.22));
-    transition: transform 0.25s ease;
-    user-select: none;
-    flex-shrink: 0;
-}
-
-.form-mascot:hover {
-    transform: scale(1.15) rotate(4deg);
-    animation: happyWiggle 0.6s ease;
-}
-
-@keyframes happyWiggle {
-    0%, 100% { transform: scale(1.15) rotate(0deg); }
-    25% { transform: scale(1.15) rotate(-8deg); }
-    75% { transform: scale(1.15) rotate(8deg); }
+.card-header h2::before {
+    content: "";
+    display: inline-block;
+    width: 6px;
+    height: 20px;
+    background: linear-gradient(180deg, #f59e0b, #fbbf24);
+    border-radius: 4px;
 }
 
 .form-desc {
@@ -672,14 +660,6 @@ body {
 
     .form-card, .result-card {
         padding: 22px 18px;
-    }
-
-    .card-header-with-mascot {
-        align-items: center;
-    }
-
-    .form-mascot {
-        width: 104px; /* 모바일에서도 2배 확대 */
     }
 
     .result-header {
