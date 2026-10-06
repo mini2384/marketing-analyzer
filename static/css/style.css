@@ -581,27 +581,36 @@ body {
     color: #b45309;
 }
 
-/* 🖍️ 형광펜 하이라이트 효과 (전체 배경색 var(--bg-page)과 동일하게 적용) */
+/* 🖍️ 형광펜 하이라이트 효과 (웹사이트 전체 배경색 var(--bg-page)과 동일하게 적용) */
 .report-content strong {
     color: #1a140e;
     font-weight: 800;
-    background: linear-gradient(to top, var(--bg-page) 70%, transparent 70%);
-    padding: 1px 3px;
+    background-color: var(--bg-page);
+    padding: 2px 5px;
     margin: 0 1px;
-    border-radius: 2px;
+    border-radius: 3px;
     box-decoration-break: clone;
     -webkit-box-decoration-break: clone;
+    border-bottom: 2px solid var(--border-color);
+}
+
+.report-content h1 strong,
+.report-content h2 strong,
+.report-content h3 strong {
+    background-color: transparent;
+    border-bottom: none;
+    padding: 0;
 }
 
 .report-content mark,
 .report-content .highlight {
     background-color: var(--bg-page);
     color: #1a140e;
-    padding: 2px 5px;
+    padding: 2px 6px;
     margin: 0 1px;
     border-radius: 3px;
     font-weight: 800;
-    border-bottom: 1.5px solid var(--border-color);
+    border-bottom: 2px solid var(--border-color);
 }
 
 .report-content code {
