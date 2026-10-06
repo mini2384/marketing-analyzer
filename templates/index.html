@@ -22,9 +22,75 @@
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
+    <!-- 🔐 보안 비밀번호 잠금 전체화면 모달 (0927 비밀번호 / 5회 실패 시 1시간 잠금) -->
+    <div id="lock-overlay" class="lock-overlay">
+        <div class="lock-modal" id="lock-modal">
+            <!-- 상단 캐릭터 & 아이콘 -->
+            <div class="lock-header">
+                <div class="lock-character-wrap">
+                    <img src="/static/images/tweety_pose.png" alt="보안 마스코트" class="lock-character">
+                </div>
+                <div class="lock-badge">🔒 보안 접근 제한</div>
+                <h2>보안 비밀번호 입력</h2>
+                <p class="lock-subtitle">승인된 사용자만 접근할 수 있는 페이지입니다.<br>4자리 비밀번호를 입력해 주세요.</p>
+            </div>
+
+            <!-- PIN 표시 인디케이터 (4개 도트) -->
+            <div class="pin-display" id="pin-display" role="status" aria-label="입력된 비밀번호 자리수">
+                <div class="pin-dot" id="dot-0"></div>
+                <div class="pin-dot" id="dot-1"></div>
+                <div class="pin-dot" id="dot-2"></div>
+                <div class="pin-dot" id="dot-3"></div>
+            </div>
+
+            <!-- 실제 키보드 입력용 숨김 필드 (모바일 및 PC 호환) -->
+            <input type="password" id="pin-hidden-input" maxlength="4" pattern="[0-9]*" inputmode="numeric" autocomplete="off" aria-label="4자리 비밀번호" autofocus>
+
+            <!-- 상태 및 에러 메시지 표시 -->
+            <div id="lock-message" class="lock-message"></div>
+
+            <!-- 5회 실패 시 1시간 잠금 카운트다운 타이머 박스 -->
+            <div id="lock-timer-box" class="lock-timer-box hidden">
+                <div class="timer-icon">⏳</div>
+                <div class="timer-text-content">
+                    <strong class="timer-title">비밀번호 5회 오류로 입력이 차단되었습니다</strong>
+                    <p class="timer-desc">보안을 위해 1시간 동안 잠금 처리됩니다.<br>남은 시간: <span id="lock-countdown" class="lock-countdown">59분 59초</span></p>
+                </div>
+            </div>
+
+            <!-- 숫자 키패드 -->
+            <div class="pin-keypad" id="pin-keypad">
+                <button type="button" class="key-btn" data-key="1">1</button>
+                <button type="button" class="key-btn" data-key="2">2</button>
+                <button type="button" class="key-btn" data-key="3">3</button>
+                <button type="button" class="key-btn" data-key="4">4</button>
+                <button type="button" class="key-btn" data-key="5">5</button>
+                <button type="button" class="key-btn" data-key="6">6</button>
+                <button type="button" class="key-btn" data-key="7">7</button>
+                <button type="button" class="key-btn" data-key="8">8</button>
+                <button type="button" class="key-btn" data-key="9">9</button>
+                <button type="button" class="key-btn key-action" id="key-clear" title="전체 지우기">C</button>
+                <button type="button" class="key-btn" data-key="0">0</button>
+                <button type="button" class="key-btn key-action" id="key-backspace" title="지우기">⌫</button>
+            </div>
+
+            <!-- 확인 버튼 -->
+            <div class="lock-actions">
+                <button type="button" id="pin-submit-btn" class="btn btn-primary pin-submit-btn" disabled>
+                    <span class="btn-text">잠금 해제</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
     <div class="container">
-        <!-- 헤더 영역 -->
+        <!-- 헤더 영역 (우측 상단 다시 잠그기 버튼 포함) -->
         <header class="app-header">
+            <div class="header-top-bar">
+                <button type="button" id="relock-btn" class="btn-relock" title="앱 화면 다시 잠그기">
+                    🔒 다시 잠그기
+                </button>
+            </div>
             <div class="badge">Fact-Checked by Serper & Gemini</div>
             <!-- 제목 바로 위: 격자무늬만 빠지고 흰 구름이 온전한 트위티 캐릭터 -->
             <div class="header-character-wrap">

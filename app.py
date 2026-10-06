@@ -1,14 +1,18 @@
 import os
 import json
+import time
 import logging
 import requests
-from flask import Flask, render_template, request, jsonify, send_from_directory, make_response
+from flask import Flask, render_template, request, jsonify, send_from_directory, make_response, session
 from dotenv import load_dotenv
 
 # .env 파일에서 환경 변수 불러오기
 load_dotenv()
 
 app = Flask(__name__)
+# 보안 세션 암호화 키 설정
+app.secret_key = os.getenv("SECRET_KEY", "marketing-analyzer-auth-key-0927-secure")
+app.config['PERMANENT_SESSION_LIFETIME'] = 86400 * 7  # 7일간 세션 유지
 
 # 로깅 설정 (Backend Log 포맷 지정)
 logging.basicConfig(
@@ -16,6 +20,91 @@ logging.basicConfig(
     format='[%(asctime)s] %(levelname)s - %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
 )
+
+# ==============================================================================
+# 비밀번호 보안 및 5회 실패 시 1시간 잠금 정책 상수 & 메모리 저장소
+# ==============================================================================
+CORRECT_PIN = "0927"         # 설정된 4자리 비밀번호
+MAX_ATTEMPTS = 5            # 최대 허용 실패 횟수
+LOCKOUT_SECONDS = 3600      # 잠금 유지 시간 (1시간 = 3,600초)
+
+# IP 기반 락아웃 추적 딕셔너리 (세션 쿠키 삭제 우회 차단용 이중 방어)
+# 형식: { ip_address: { "attempts": int, "locked_until": float } }
+ip_lockout_store = {}
+
+def get_client_ip():
+    """클라이언트 IP 주소를 반환합니다 (프록시/Vercel X-Forwarded-For 지원)."""
+    from flask import has_request_context
+    if has_request_context():
+        forwarded = request.headers.get("X-Forwarded-For")
+        if forwarded:
+            return forwarded.split(",")[0].strip()
+        return request.remote_addr or "unknown_ip"
+    return "127.0.0.1"
+
+def get_auth_state():
+    """현재 클라이언트의 세션 및 IP 기반 잠금/시도 상태를 통합 계산합니다."""
+    ip = get_client_ip()
+    now = time.time()
+    
+    # 1. 세션 데이터 확인
+    session_attempts = session.get("pin_attempts", 0)
+    session_locked_until = session.get("pin_locked_until", 0)
+    
+    # 2. IP 데이터 확인
+    ip_data = ip_lockout_store.get(ip, {"attempts": 0, "locked_until": 0})
+    ip_attempts = ip_data.get("attempts", 0)
+    ip_locked_until = ip_data.get("locked_until", 0)
+    
+    # 세션과 IP 중 더 큰(엄격한) 제약 값을 적용
+    max_locked_until = max(session_locked_until, ip_locked_until)
+    max_attempts = max(session_attempts, ip_attempts)
+    
+    # 잠금 기간이 만료되었으면 자동 초기화
+    if max_locked_until > 0 and now >= max_locked_until:
+        session["pin_attempts"] = 0
+        session["pin_locked_until"] = 0
+        if ip in ip_lockout_store:
+            ip_lockout_store[ip] = {"attempts": 0, "locked_until": 0}
+        return {"locked": False, "attempts": 0, "remaining_seconds": 0}
+        
+    if max_locked_until > now:
+        remaining = int(max_locked_until - now)
+        return {"locked": True, "attempts": max_attempts, "remaining_seconds": remaining}
+        
+    return {"locked": False, "attempts": max_attempts, "remaining_seconds": 0}
+
+def record_failed_attempt():
+    """비밀번호 오답 시 실패 횟수를 1 증가시키고, 5회 도달 시 1시간 잠금을 적용합니다."""
+    ip = get_client_ip()
+    now = time.time()
+    
+    state = get_auth_state()
+    new_attempts = state["attempts"] + 1
+    
+    if new_attempts >= MAX_ATTEMPTS:
+        locked_until = now + LOCKOUT_SECONDS
+        session["pin_attempts"] = new_attempts
+        session["pin_locked_until"] = locked_until
+        ip_lockout_store[ip] = {"attempts": new_attempts, "locked_until": locked_until}
+        app.logger.warning(f"[보안 경고] IP {ip} 비밀번호 5회 연속 실패로 1시간 동안 잠금 처리됨")
+        return {"locked": True, "attempts": new_attempts, "remaining_seconds": LOCKOUT_SECONDS}
+    else:
+        session["pin_attempts"] = new_attempts
+        session["pin_locked_until"] = 0
+        ip_lockout_store[ip] = {"attempts": new_attempts, "locked_until": 0}
+        app.logger.info(f"[보안 알림] IP {ip} 비밀번호 오답 (시도 횟수: {new_attempts}/{MAX_ATTEMPTS})")
+        return {"locked": False, "attempts": new_attempts, "remaining_seconds": 0}
+
+def clear_auth_failures():
+    """인증 성공 시 시도 횟수 및 잠금 상태를 초기화합니다."""
+    from flask import has_request_context
+    ip = get_client_ip()
+    if has_request_context():
+        session["pin_attempts"] = 0
+        session["pin_locked_until"] = 0
+    if ip in ip_lockout_store:
+        ip_lockout_store[ip] = {"attempts": 0, "locked_until": 0}
 
 def search_serper(query, api_key):
     """
@@ -103,13 +192,102 @@ def service_worker():
     response = make_response(send_from_directory("static", "sw.js"))
     response.headers["Service-Worker-Allowed"] = "/"
     response.headers["Content-Type"] = "application/javascript"
-    return response
+@app.route("/api/auth-status", methods=["GET"])
+def auth_status():
+    """현재 사용자의 세션 인증 상태 및 잠금 상태를 반환합니다."""
+    state = get_auth_state()
+    is_authenticated = bool(session.get("authenticated", False))
+    attempts_left = max(0, MAX_ATTEMPTS - state["attempts"])
+    
+    return jsonify({
+        "success": True,
+        "authenticated": is_authenticated,
+        "locked": state["locked"],
+        "remaining_seconds": state["remaining_seconds"],
+        "attempts_left": attempts_left,
+        "max_attempts": MAX_ATTEMPTS
+    })
+
+@app.route("/api/verify-pin", methods=["POST"])
+def verify_pin():
+    """
+    4자리 비밀번호(PIN)를 검증합니다.
+    - 정답: '0927'
+    - 5회 이상 오답 시 1시간(3,600초) 잠금 적용
+    """
+    state = get_auth_state()
+    if state["locked"]:
+        rem_sec = state["remaining_seconds"]
+        minutes = rem_sec // 60
+        seconds = rem_sec % 60
+        return jsonify({
+            "success": False,
+            "locked": True,
+            "remaining_seconds": rem_sec,
+            "error": f"비밀번호를 5회 잘못 입력하여 계정이 잠겼습니다. ({minutes}분 {seconds}초 후 재시도 가능)"
+        }), 429
+
+    data = request.get_json() or {}
+    pin = str(data.get("pin", "")).strip()
+
+    if not pin:
+        return jsonify({
+            "success": False,
+            "locked": False,
+            "error": "비밀번호를 입력해 주세요."
+        }), 400
+
+    # 비밀번호 검증 (0927)
+    if pin == CORRECT_PIN:
+        # 인증 성공: 세션에 영구 인증 플래그 저장 및 실패 횟수 초기화
+        session["authenticated"] = True
+        session.permanent = True
+        clear_auth_failures()
+        app.logger.info(f"[보안 인증 성공] IP {get_client_ip()} 정상 인증 완료")
+        return jsonify({
+            "success": True,
+            "authenticated": True,
+            "message": "인증에 성공했습니다."
+        })
+    else:
+        # 비밀번호 오답: 실패 기록 및 5회 초과 시 1시간 잠금
+        fail_state = record_failed_attempt()
+        if fail_state["locked"]:
+            rem_sec = fail_state["remaining_seconds"]
+            return jsonify({
+                "success": False,
+                "locked": True,
+                "remaining_seconds": rem_sec,
+                "error": "비밀번호를 5회 연속 잘못 입력하여 1시간 동안 입력이 차단되었습니다."
+            }), 429
+        else:
+            attempts_left = MAX_ATTEMPTS - fail_state["attempts"]
+            return jsonify({
+                "success": False,
+                "locked": False,
+                "attempts_left": attempts_left,
+                "error": f"비밀번호가 올바르지 않습니다. (남은 기회: {attempts_left}회)"
+            }), 401
+
+@app.route("/api/logout", methods=["POST"])
+def logout():
+    """세션 인증을 해제하고 다시 잠금 상태로 전환합니다."""
+    session.pop("authenticated", None)
+    return jsonify({"success": True, "message": "로그아웃되었습니다."})
 
 @app.route("/generate", methods=["POST"])
 def generate():
     """
     사용자의 입력을 받아 Serper 검색 후 Gemini로 사실 기반 마케팅 보고서를 생성합니다.
+    (비밀번호 인증 필요)
     """
+    # 0. 보안 인증 상태 확인 (우회 방지)
+    if not session.get("authenticated"):
+        return jsonify({
+            "success": False,
+            "error": "보안 인증이 필요합니다. 4자리 비밀번호를 먼저 입력해 주세요."
+        }), 401
+
     try:
         data = request.get_json()
         if not data:
