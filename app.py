@@ -134,6 +134,52 @@ def search_serper(query, api_key):
     app.logger.info(f"[Serper 검색 완료] 성공적으로 검색 결과를 수신했습니다.")
     return data
 
+def find_official_channels(company_name, api_key):
+    """
+    기업의 공식 홈페이지, 공식 인스타그램, 공식 유튜브 채널 링크를 실시간 검색으로 추출합니다.
+    """
+    channels = {"homepage": None, "instagram": None, "youtube": None}
+    url = "https://google.serper.dev/search"
+    headers = {
+        "X-API-KEY": api_key,
+        "Content-Type": "application/json"
+    }
+    
+    # 1. 1차 종합 검색
+    query = f"{company_name} 공식 홈페이지 인스타그램 유튜브"
+    try:
+        res = requests.post(url, headers=headers, json={"q": query, "gl": "kr", "hl": "ko", "num": 10}, timeout=10)
+        if res.status_code == 200:
+            for item in res.json().get("organic", []):
+                link = item.get("link", "")
+                # 인스타그램 공식 프로필
+                if "instagram.com/" in link and not channels["instagram"] and "/p/" not in link:
+                    channels["instagram"] = link
+                # 유튜브 공식 채널
+                elif ("youtube.com/@" in link or "youtube.com/channel" in link or "youtube.com/c/" in link) and not channels["youtube"] and "/watch" not in link:
+                    channels["youtube"] = link
+                # 공식 홈페이지
+                elif not channels["homepage"] and not any(x in link for x in ["instagram.com", "youtube.com", "facebook.com", "namu.wiki", "blog.naver.com", "tistory.com", "news", "brunch.co.kr"]):
+                    channels["homepage"] = link
+
+        # 2. 누락된 소셜 채널이 있는 경우 타깃 검색 보강
+        missing = [k for k in ["youtube", "instagram"] if not channels[k]]
+        if missing:
+            target_q = f"{company_name} 공식 " + " ".join(missing) + " 바로가기"
+            res_extra = requests.post(url, headers=headers, json={"q": target_q, "gl": "kr", "hl": "ko", "num": 5}, timeout=10)
+            if res_extra.status_code == 200:
+                for item in res_extra.json().get("organic", []):
+                    link = item.get("link", "")
+                    if "instagram.com/" in link and not channels["instagram"] and "/p/" not in link:
+                        channels["instagram"] = link
+                    elif "youtube.com/" in link and not channels["youtube"]:
+                        channels["youtube"] = link
+    except Exception as e:
+        app.logger.warning(f"[공식 채널 탐색 경고] {e}")
+
+    app.logger.info(f"[공식 채널 탐색 결과] {company_name} -> {channels}")
+    return channels
+
 def call_gemini(prompt, api_key):
     """
     Gemini REST API를 호출하여 프롬프트에 따른 마케팅 분석 보고서를 생성합니다.
@@ -357,10 +403,13 @@ def generate():
                 "error": ".env 파일에 SERPER_API_KEY가 올바르게 설정되지 않았습니다. 실제 발급받은 키를 .env 파일에 입력해 주세요."
             }), 400
 
-        # 3. Serper.dev를 통한 실시간 공식/팩트 검색
-        # 기업의 미션, 비전, 핵심가치, 사회·환경적 가치, 마케팅 활동 등 다각도 검색 쿼리 구성
+        # 3. Serper.dev를 통한 실시간 공식/팩트 검색 & 공식 채널(홈페이지, 인스타, 유튜브) 탐색
+        # 3-1. 기업 가치 체계 및 마케팅 전략 검색
         search_query = f"{company_name} 미션 비전 핵심가치 사회적 환경적 가치 마케팅 {campaign}".strip()
         search_results = search_serper(search_query, serper_api_key)
+        
+        # 3-2. 기업의 공식 홈페이지, 공식 인스타그램, 공식 유튜브 채널 링크 정밀 추출
+        official_channels = find_official_channels(company_name, serper_api_key)
         
         # 검색 결과에서 유용한 텍스트 발췌 (최대 8개)
         organic_results = search_results.get("organic", [])
@@ -374,10 +423,18 @@ def generate():
         search_context = "\n".join(snippets) if snippets else "검색 결과가 충분하지 않습니다."
         app.logger.info(f"[검색 결과 요약 완료] 총 {len(snippets)}개의 팩트 정보 추출")
 
+        hp_link = official_channels.get('homepage')
+        insta_link = official_channels.get('instagram')
+        yt_link = official_channels.get('youtube')
+
+        channels_text = f"""- 공식 홈페이지: {hp_link if hp_link else '검색 결과 없음 (추가 리서치 필요)'}
+- 공식 인스타그램: {insta_link if insta_link else '검색 결과 없음 (추가 리서치 필요)'}
+- 공식 유튜브 채널: {yt_link if yt_link else '검색 결과 없음 (추가 리서치 필요)'}"""
+
         # 4. 팩트 기반 프롬프트 엔지니어링 (가치 체계 및 마케팅 연결성 분석 포함)
         prompt = f"""당신은 기업 철학과 브랜드 전략을 데이터와 사실에 기반하여 심층 분석하는 Senior 마케팅 전략 컨설턴트입니다.
 
-제공된 [실시간 검색 데이터]를 철저히 바탕으로 다음 기업의 마케팅 분석 보고서 초안을 작성하십시오.
+제공된 [실시간 검색 데이터]와 [기업 공식 채널 링크 데이터]를 철저히 바탕으로 다음 기업의 마케팅 분석 보고서 초안을 작성하십시오.
 
 ### 분석 대상 정보
 - 대상 기업명: {company_name}
@@ -386,6 +443,9 @@ def generate():
 - 주요 경쟁사: {competitors if competitors else '미지정'}
 - 관심 마케팅 채널: {channels if channels else '미지정 (주요 공식 채널 위주)'}
 - 분석 희망 캠페인: {campaign if campaign else '최신 주요 마케팅 활동'}
+
+### [기업 공식 채널 링크 데이터]
+{channels_text}
 
 ### [실시간 검색 데이터]
 {search_context}
@@ -396,6 +456,7 @@ def generate():
 2. 검색 데이터에 명확한 근거가 없는 내용은 추측하지 말고 **"검색 결과에서 확인 불가 (추가 리서치 필요)"**라고 솔직하고 명확하게 기록하십시오.
 3. 숫자가 언급될 경우 출처 데이터에 있는 수치만 인용하십시오.
 4. 분석 보고서는 가독성이 좋은 Markdown 형식으로 깔끔하게 작성하십시오.
+5. **보고서의 맨 마지막 목차에는 제공된 공식 홈페이지, 공식 인스타그램, 공식 유튜브 링크를 반드시 클릭 가능한 마크다운 링크로 명시하십시오.**
 
 ### 보고서 필수 목차
 # [{company_name}] 마케팅 분석 및 기업 가치 연계 보고서
@@ -423,14 +484,25 @@ def generate():
 ## 6. 확인 불가 항목 및 한계점
 - 검색 데이터에서 명확히 확인되지 않은 미션/가치/수치 등 추가 검증이 필요한 항목 솔직 명시
 
-## 7. 참고한 공식 출처 및 링크
+## 7. 참고한 공식 출처 및 기사 링크
 - 위 검색 결과에 포함된 실제 URL 링크 목록
+
+## 8. 기업 공식 채널 바로가기 (Official Channels)
+- 🌐 **공식 홈페이지**: {f'[{company_name} 공식 홈페이지 바로가기]({hp_link})' if hp_link else '확인 불가 (추가 리서치 필요)'}
+- 📸 **공식 인스타그램**: {f'[{company_name} 공식 인스타그램 바로가기]({insta_link})' if insta_link else '확인 불가 (추가 리서치 필요)'}
+- 📺 **공식 유튜브**: {f'[{company_name} 공식 유튜브 채널 바로가기]({yt_link})' if yt_link else '확인 불가 (추가 리서치 필요)'}
 """
 
         # 5. Gemini API 호출
         report = call_gemini(prompt, gemini_api_key)
         
-        app.logger.info(f"[보고서 생성 완료] '{company_name}' 분석 보고서 반환")
+        # 6. 보고서 맨 마지막에 공식 채널 링크가 누락되지 않도록 보장하는 후처리
+        official_channel_block = f"""\n\n---\n\n## 8. 기업 공식 채널 바로가기\n- 🌐 **공식 홈페이지**: {f'[{company_name} 공식 홈페이지 바로가기]({hp_link})' if hp_link else '확인 불가 (추가 리서치 필요)'}\n- 📸 **공식 인스타그램**: {f'[{company_name} 공식 인스타그램 바로가기]({insta_link})' if insta_link else '확인 불가 (추가 리서치 필요)'}\n- 📺 **공식 유튜브**: {f'[{company_name} 공식 유튜브 채널 바로가기]({yt_link})' if yt_link else '확인 불가 (추가 리서치 필요)'}\n"""
+
+        if "기업 공식 채널 바로가기" not in report:
+            report += official_channel_block
+        
+        app.logger.info(f"[보고서 생성 완료] '{company_name}' 분석 보고서 반환 (최하단 공식 채널 링크 포함)")
         return jsonify({
             "success": True,
             "report": report
