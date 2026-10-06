@@ -12,7 +12,7 @@ load_dotenv()
 app = Flask(__name__)
 # 보안 세션 암호화 키 설정
 app.secret_key = os.getenv("SECRET_KEY", "marketing-analyzer-auth-key-0927-secure")
-app.config['PERMANENT_SESSION_LIFETIME'] = 86400 * 7  # 7일간 세션 유지
+app.config['PERMANENT_SESSION_LIFETIME'] = 86400  # 24시간 동안 세션 유지
 
 # 로깅 설정 (Backend Log 포맷 지정)
 logging.basicConfig(
@@ -22,11 +22,12 @@ logging.basicConfig(
 )
 
 # ==============================================================================
-# 비밀번호 보안 및 5회 실패 시 1시간 잠금 정책 상수 & 메모리 저장소
+# 비밀번호 보안 및 정책 상수 & 메모리 저장소
 # ==============================================================================
 CORRECT_PIN = "0927"         # 설정된 4자리 비밀번호
 MAX_ATTEMPTS = 5            # 최대 허용 실패 횟수
-LOCKOUT_SECONDS = 3600      # 잠금 유지 시간 (1시간 = 3,600초)
+LOCKOUT_SECONDS = 3600      # 5회 실패 시 잠금 시간 (1시간 = 3,600초)
+AUTH_LIFETIME_SECONDS = 86400  # 1회 인증 시 유지 시간 (정확히 24시간 = 86,400초)
 
 # IP 기반 락아웃 추적 딕셔너리 (세션 쿠키 삭제 우회 차단용 이중 방어)
 # 형식: { ip_address: { "attempts": int, "locked_until": float } }
@@ -192,16 +193,39 @@ def service_worker():
     response = make_response(send_from_directory("static", "sw.js"))
     response.headers["Service-Worker-Allowed"] = "/"
     response.headers["Content-Type"] = "application/javascript"
+def is_session_authenticated():
+    """
+    세션 인증 여부 및 24시간 만료 여부를 판별합니다.
+    - 인증 시점으로부터 24시간(86,400초) 초과 시 자동 만료 및 세션 제거
+    """
+    if not session.get("authenticated"):
+        return False, 0
+        
+    now = time.time()
+    expires_at = session.get("auth_expires_at", 0)
+    
+    # 24시간 만료 검증
+    if expires_at <= 0 or now >= expires_at:
+        session.pop("authenticated", None)
+        session.pop("auth_expires_at", None)
+        session.pop("authenticated_at", None)
+        app.logger.info(f"[보안 세션 만료] 24시간이 경과하여 세션이 자동 잠금되었습니다. (IP: {get_client_ip()})")
+        return False, 0
+        
+    remaining_seconds = int(expires_at - now)
+    return True, remaining_seconds
+
 @app.route("/api/auth-status", methods=["GET"])
 def auth_status():
-    """현재 사용자의 세션 인증 상태 및 잠금 상태를 반환합니다."""
+    """현재 사용자의 세션 인증 상태, 24시간 만료 시간 및 잠금 상태를 반환합니다."""
     state = get_auth_state()
-    is_authenticated = bool(session.get("authenticated", False))
+    is_authenticated, auth_remaining = is_session_authenticated()
     attempts_left = max(0, MAX_ATTEMPTS - state["attempts"])
     
     return jsonify({
         "success": True,
         "authenticated": is_authenticated,
+        "auth_remaining_seconds": auth_remaining,  # 24시간 중 남은 유효 시간 (초)
         "locked": state["locked"],
         "remaining_seconds": state["remaining_seconds"],
         "attempts_left": attempts_left,
@@ -213,7 +237,8 @@ def verify_pin():
     """
     4자리 비밀번호(PIN)를 검증합니다.
     - 정답: '0927'
-    - 5회 이상 오답 시 1시간(3,600초) 잠금 적용
+    - 인증 성공 시: 정확히 24시간(86,400초) 동안만 인증 유지
+    - 5회 이상 오답 시: 1시간(3,600초) 잠금 적용
     """
     state = get_auth_state()
     if state["locked"]:
@@ -239,15 +264,19 @@ def verify_pin():
 
     # 비밀번호 검증 (0927)
     if pin == CORRECT_PIN:
-        # 인증 성공: 세션에 영구 인증 플래그 저장 및 실패 횟수 초기화
+        # 인증 성공: 24시간 유효 기간 설정
+        now = time.time()
         session["authenticated"] = True
+        session["authenticated_at"] = now
+        session["auth_expires_at"] = now + AUTH_LIFETIME_SECONDS  # 24시간 후 만료
         session.permanent = True
         clear_auth_failures()
-        app.logger.info(f"[보안 인증 성공] IP {get_client_ip()} 정상 인증 완료")
+        app.logger.info(f"[보안 인증 성공] IP {get_client_ip()} 정상 인증 완료 (24시간 동안 유지)")
         return jsonify({
             "success": True,
             "authenticated": True,
-            "message": "인증에 성공했습니다."
+            "auth_remaining_seconds": AUTH_LIFETIME_SECONDS,
+            "message": "인증에 성공했습니다. 24시간 동안 유지됩니다."
         })
     else:
         # 비밀번호 오답: 실패 기록 및 5회 초과 시 1시간 잠금
@@ -271,21 +300,24 @@ def verify_pin():
 
 @app.route("/api/logout", methods=["POST"])
 def logout():
-    """세션 인증을 해제하고 다시 잠금 상태로 전환합니다."""
+    """세션 인증을 해제하고 즉시 다시 잠금 상태로 전환합니다."""
     session.pop("authenticated", None)
+    session.pop("auth_expires_at", None)
+    session.pop("authenticated_at", None)
     return jsonify({"success": True, "message": "로그아웃되었습니다."})
 
 @app.route("/generate", methods=["POST"])
 def generate():
     """
     사용자의 입력을 받아 Serper 검색 후 Gemini로 사실 기반 마케팅 보고서를 생성합니다.
-    (비밀번호 인증 필요)
+    (24시간 내 유효한 비밀번호 인증 필수)
     """
-    # 0. 보안 인증 상태 확인 (우회 방지)
-    if not session.get("authenticated"):
+    # 0. 보안 인증 및 24시간 유효성 확인
+    is_authenticated, _ = is_session_authenticated()
+    if not is_authenticated:
         return jsonify({
             "success": False,
-            "error": "보안 인증이 필요합니다. 4자리 비밀번호를 먼저 입력해 주세요."
+            "error": "보안 인증이 필요하거나 24시간 유효 기간이 만료되었습니다. 비밀번호를 다시 입력해 주세요."
         }), 401
 
     try:

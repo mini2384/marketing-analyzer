@@ -123,9 +123,13 @@ document.addEventListener("DOMContentLoaded", () => {
             const data = await res.json();
 
             if (res.ok && data.success) {
-                showLockMsg("🔓 인증 성공! 환영합니다.", true);
+                showLockMsg("🔓 인증 성공! 24시간 동안 유지됩니다.", true);
                 enteredPin = "";
                 updatePinDots();
+                
+                // 24시간 후 자동 재잠금 타이머 등록
+                scheduleAutoRelock(data.auth_remaining_seconds || 86400);
+
                 setTimeout(() => {
                     lockOverlay.classList.add("unlocked");
                     showLockMsg("");
@@ -228,12 +232,39 @@ document.addEventListener("DOMContentLoaded", () => {
         } catch (e) {
             console.error("로그아웃 오류:", e);
         }
+        if (autoRelockTimeout) {
+            clearTimeout(autoRelockTimeout);
+            autoRelockTimeout = null;
+        }
         enteredPin = "";
         updatePinDots();
         showLockMsg("");
         lockOverlay.classList.remove("unlocked");
         pinHiddenInput.focus();
     });
+
+    /**
+     * 24시간 경과 시 클라이언트 자동 잠금 타이머 등록
+     */
+    let autoRelockTimeout = null;
+    function scheduleAutoRelock(remainingSeconds) {
+        if (autoRelockTimeout) {
+            clearTimeout(autoRelockTimeout);
+            autoRelockTimeout = null;
+        }
+
+        if (remainingSeconds > 0) {
+            // 남은 초(최대 86400초 = 24시간) 후 잠금 화면 활성화
+            // 안전한 타이머 설정 (밀리초 변환)
+            autoRelockTimeout = setTimeout(() => {
+                lockOverlay.classList.remove("unlocked");
+                showLockMsg("24시간 유효 기간이 만료되어 다시 잠겼습니다. 비밀번호를 입력해 주세요.");
+                enteredPin = "";
+                updatePinDots();
+                pinHiddenInput.focus();
+            }, remainingSeconds * 1000);
+        }
+    }
 
     /**
      * 초기 인증 및 락아웃 상태 서버 동기화
@@ -244,8 +275,10 @@ document.addEventListener("DOMContentLoaded", () => {
             const data = await res.json();
 
             if (data.authenticated) {
-                // 이미 인증된 세션
+                // 이미 인증된 세션 (24시간 이내)
                 lockOverlay.classList.add("unlocked");
+                // 24시간 남은 시간 타이머 스케줄링
+                scheduleAutoRelock(data.auth_remaining_seconds);
             } else {
                 lockOverlay.classList.remove("unlocked");
                 if (data.locked) {
