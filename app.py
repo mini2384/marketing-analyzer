@@ -485,25 +485,25 @@ def generate():
 ## 6. 확인 불가 항목 및 한계점
 - 검색 데이터에서 명확히 확인되지 않은 미션/가치/수치 등 추가 검증이 필요한 항목 솔직 명시
 
-## 7. 참고한 공식 출처 및 기사 링크
-- 위 검색 결과에 포함된 실제 URL 링크 목록
-
-## 8. 기업 공식 채널 바로가기 (Official Channels)
+## 7. 기업 공식 채널 바로가기 (Official Channels)
 - 🌐 **공식 홈페이지**: {f'[{company_name} 공식 홈페이지 바로가기]({hp_link})' if hp_link else '확인 불가 (추가 리서치 필요)'}
 - 📸 **공식 인스타그램**: {f'[{company_name} 공식 인스타그램 바로가기]({insta_link})' if insta_link else '확인 불가 (추가 리서치 필요)'}
 - 📺 **공식 유튜브**: {f'[{company_name} 공식 유튜브 채널 바로가기]({yt_link})' if yt_link else '확인 불가 (추가 리서치 필요)'}
+
+## 8. 참고한 공식 출처 및 기사 링크
+- 위 검색 결과에 포함된 실제 URL 링크 목록
 """
 
         # 5. Gemini API 호출
         report = call_gemini(prompt, gemini_api_key)
         
-        # 6. 보고서 맨 마지막에 공식 채널 링크가 누락되지 않도록 보장하는 후처리
-        official_channel_block = f"""\n\n---\n\n## 8. 기업 공식 채널 바로가기\n- 🌐 **공식 홈페이지**: {f'[{company_name} 공식 홈페이지 바로가기]({hp_link})' if hp_link else '확인 불가 (추가 리서치 필요)'}\n- 📸 **공식 인스타그램**: {f'[{company_name} 공식 인스타그램 바로가기]({insta_link})' if insta_link else '확인 불가 (추가 리서치 필요)'}\n- 📺 **공식 유튜브**: {f'[{company_name} 공식 유튜브 채널 바로가기]({yt_link})' if yt_link else '확인 불가 (추가 리서치 필요)'}\n"""
+        # 6. 보고서에 공식 채널 링크가 누락되지 않도록 보장하는 후처리
+        official_channel_block = f"""\n\n---\n\n## 7. 기업 공식 채널 바로가기\n- 🌐 **공식 홈페이지**: {f'[{company_name} 공식 홈페이지 바로가기]({hp_link})' if hp_link else '확인 불가 (추가 리서치 필요)'}\n- 📸 **공식 인스타그램**: {f'[{company_name} 공식 인스타그램 바로가기]({insta_link})' if insta_link else '확인 불가 (추가 리서치 필요)'}\n- 📺 **공식 유튜브**: {f'[{company_name} 공식 유튜브 채널 바로가기]({yt_link})' if yt_link else '확인 불가 (추가 리서치 필요)'}\n"""
 
         if "기업 공식 채널 바로가기" not in report:
             report += official_channel_block
         
-        app.logger.info(f"[보고서 생성 완료] '{company_name}' 분석 보고서 반환 (최하단 공식 채널 링크 포함)")
+        app.logger.info(f"[보고서 생성 완료] '{company_name}' 분석 보고서 반환 (공식 채널 링크 포함)")
         return jsonify({
             "success": True,
             "report": report
