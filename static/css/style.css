@@ -581,15 +581,27 @@ body {
     color: #b45309;
 }
 
-.report-content hr {
-    border: none;
-    border-top: 1.5px solid var(--border-color);
-    margin: 30px 0;
-}
-
+/* 🖍️ 노란색 형광펜 하이라이트 효과 (중요 핵심 부분 강조) */
 .report-content strong {
     color: #1a140e;
-    font-weight: 700;
+    font-weight: 800;
+    background: linear-gradient(to top, rgba(253, 224, 71, 0.85) 55%, transparent 55%);
+    padding: 1px 4px;
+    margin: 0 1px;
+    border-radius: 3px;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+}
+
+.report-content mark,
+.report-content .highlight {
+    background: linear-gradient(120deg, #fef08a 0%, #fde047 100%);
+    color: #1a140e;
+    padding: 2px 6px;
+    margin: 0 2px;
+    border-radius: 4px;
+    font-weight: 800;
+    box-shadow: 0 1px 4px rgba(234, 179, 8, 0.25);
 }
 
 .report-content code {
